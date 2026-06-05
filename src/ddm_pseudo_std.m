@@ -1,5 +1,7 @@
-function ddm_std=ddm_pseudo_std(pa, mode)
-     noisepercentile=20 ; 
+function ddm_std=ddm_pseudo_std(pa, mode, noisepercentile)
+%%    pa: it is the N x M x S vector with N x M sized DDM's of S reflections along the track
+%%    mode: it switches between two options: 'peak' using the peak of the DDM and 'mean' using the barycenter
+%%    noisepercentile= It is the percentile in % considered to separate noise floor from signal (typically 10-20 %) ; 
      [Doppler_bins,Range_bins, numSPtrack] = size(pa) ; 
      ipeak_nom=(Doppler_bins+1)/2 ; 
      jpeak_nom=(Range_bins+1)/2 ; 
