@@ -82,7 +82,7 @@ Answer{4}=char(LogsOutputRootPath)  ;     Answer{11}=char(Dayfinal) ;
 Answer{6}=char(string(LatSouth))  ;       Answer{12}= char(DDM) ;
 Answer{13}= char(DataFilter) ;
 % ****** get inputs from GUI
-prompt={ 'ProcessingSatellite [HydroGNSS-1 | HydeoGNSS-2 | both]: ',...
+prompt={ 'ProcessingSatellite [HydroGNSS-1 | HydeoGNSS-2 | Both]: ',...
          'DataInputRootPath: ',...
          'DataOutputRootPath: ',...
          'LogsOutputRootPath: ', ...
@@ -210,14 +210,25 @@ DataTag=0; Track_ID=0; IND_sixhours=0 ;
 SM_Time_resolution=ceil(juliandate(endDate)-juliandate(startDate)) ;
 readDDM=DDM; DDMs_name='DDMs.nc'; L1b_ProcessorVersion=' ' ; L1a_ProcessorVersion=' ';
 metadata_name='metadata_L1_merged.nc' ; Day_to_process=Dayinit; 
-Path_HydroGNSS_Data=[char(DataInputRootPath), '\', char(ProcessingSatellite), '\DataRelease\L1A_L1B'] ; 
-
-% for ii=1:numGoodSixhour
- 
-[DataTag, noday, Track_ID, IND_sixhours, L1b_ProcessorVersion, L1a_ProcessorVersion]=read_L1Bproduct(DataTag, Dayinit,...
+Both=0 ; 
+if ProcessingSatellite=="Both" | ProcessingSatellite=="both"
+    Both=1 ;
+    ProcessingSatellite='HydroGNSS-1' ; 
+    Path_HydroGNSS_Data=[char(DataInputRootPath), '\', char(ProcessingSatellite), '\DataRelease\L1A_L1B'] ; 
+    [DataTag, noday, Track_ID, IND_sixhours, L1b_ProcessorVersion, L1a_ProcessorVersion]=read_L1Bproduct(DataTag, Dayinit,...
     SM_Time_resolution,Path_HydroGNSS_Data, metadata_name, readDDM, ...
     DDMs_name, Track_ID, IND_sixhours, L1b_ProcessorVersion, L1a_ProcessorVersion) ;
-
+    ProcessingSatellite='HydroGNSS-2' ; 
+    Path_HydroGNSS_Data=[char(DataInputRootPath), '\', char(ProcessingSatellite), '\DataRelease\L1A_L1B'] ; 
+    [DataTag, noday, Track_ID, IND_sixhours, L1b_ProcessorVersion, L1a_ProcessorVersion]=read_L1Bproduct(DataTag, Dayinit,...
+    SM_Time_resolution,Path_HydroGNSS_Data, metadata_name, readDDM, ...
+    DDMs_name, Track_ID, IND_sixhours, L1b_ProcessorVersion, L1a_ProcessorVersion) ;
+else
+    Path_HydroGNSS_Data=[char(DataInputRootPath), '\', char(ProcessingSatellite), '\DataRelease\L1A_L1B'] ; 
+    [DataTag, noday, Track_ID, IND_sixhours, L1b_ProcessorVersion, L1a_ProcessorVersion]=read_L1Bproduct(DataTag, Dayinit,...
+    SM_Time_resolution,Path_HydroGNSS_Data, metadata_name, readDDM, ...
+    DDMs_name, Track_ID, IND_sixhours, L1b_ProcessorVersion, L1a_ProcessorVersion) ;
+end % end if ProcessingSatellite == Both
 % end
 
 %% Crete output variables and save
