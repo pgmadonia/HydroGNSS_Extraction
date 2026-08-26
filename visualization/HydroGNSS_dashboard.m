@@ -74,7 +74,7 @@ colorDD= addDropdown('Colour by',{''});
 cmapDD = addDropdown('Colormap',{'parula','turbo','jet','hot','cool','viridis-ish (parula)','gray'});
 cmapDD.Value = 'parula';
 
-logChk = addCheckbox('Log colour scale',false);
+dbChk = addCheckbox('dB scale (10*log10)',false);
 nbinsSpin = addSpinner('Histogram bins',10,500,50);
 sizeSpin  = addSpinner('Marker size',1,60,10);
 maxSpin   = addSpinner('Max points drawn (x1000)',1,5000,200);
@@ -379,7 +379,7 @@ onPlotTypeChange();   % set initial enabled/disabled control states
         setEnable(colorDD, any(strcmp(pt,{'Map','Scatter'})));
         setEnable(nbinsSpin, strcmp(pt,'Histogram'));
         setEnable(cmapDD, any(strcmp(pt,{'Map','Scatter'})));
-        setEnable(logChk, any(strcmp(pt,{'Map','Scatter','Histogram','Time series'})));
+        setEnable(dbChk, any(strcmp(pt,{'Map','Scatter','Histogram','Time series'})));
         if ~isempty(D.file), refresh(); end
     end
 
@@ -459,7 +459,7 @@ onPlotTypeChange();   % set initial enabled/disabled control states
         name = yDD.Value;
         v = getNumeric(name, mask);
         v = v(isfinite(v));
-        if logChk.Value, v = v(v>0); v = log10(v); name = ['log10(' name ')']; end
+        if dbChk.Value, v = v(v>0); v = 10*log10(v); name = [name ' [dB]']; end
         if isempty(v)
             title(ax,'No finite data to histogram'); return;
         end
@@ -476,8 +476,8 @@ onPlotTypeChange();   % set initial enabled/disabled control states
         x = getNumericIdx(xDD.Value, idx);
         y = getNumericIdx(yDD.Value, idx);
         [c,cLabel] = colorData(idx);
-        if logChk.Value
-            good = y>0; x=x(good); y=log10(y(good));
+        if dbChk.Value
+            good = y>0; x=x(good); y=10*log10(y(good));
             if ~isempty(c), c=c(good); end
         end
         if isempty(c)
@@ -487,7 +487,7 @@ onPlotTypeChange();   % set initial enabled/disabled control states
             applyColorbar(cLabel);
         end
         xlabel(ax,xDD.Value,'Interpreter','none');
-        yl = yDD.Value; if logChk.Value, yl = ['log10(' yl ')']; end
+        yl = yDD.Value; if dbChk.Value, yl = [yl ' [dB]']; end
         ylabel(ax,yl,'Interpreter','none');
         grid(ax,'on');
         title(ax,[xDD.Value ' vs ' yDD.Value note],'Interpreter','none');
@@ -502,7 +502,7 @@ onPlotTypeChange();   % set initial enabled/disabled control states
         t = D.S.(D.timeName)(idx);
         y = getNumericIdx(yDD.Value, idx);
         name = yDD.Value;
-        if logChk.Value, good = y>0; t=t(good); y=log10(y(good)); name=['log10(' name ')']; end
+        if dbChk.Value, good = y>0; t=t(good); y=10*log10(y(good)); name=[name ' [dB]']; end
         [t,order] = sort(t); y = y(order);
         plot(ax, t, y, '.','MarkerSize',max(4,sizeSpin.Value),'Color',[0.20 0.45 0.85]);
         xlabel(ax,D.timeName,'Interpreter','none');
@@ -556,8 +556,8 @@ onPlotTypeChange();   % set initial enabled/disabled control states
         if isempty(cv) || strcmp(cv,'(uniform)'), return; end
         c = double(D.S.(cv)(idx)); c = c(:);
         label = cv;
-        if logChk.Value && strcmp(plotDD.Value,'Map')
-            good = c>0; c(~good)=NaN; c=log10(c); label=['log10(' cv ')'];
+        if dbChk.Value && strcmp(plotDD.Value,'Map')
+            good = c>0; c(~good)=NaN; c=10*log10(c); label=[cv ' [dB]'];
         end
     end
 

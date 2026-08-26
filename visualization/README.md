@@ -32,10 +32,15 @@ HydroGNSS_dashboard('D:\output\Sudd_25-08-26_10-30.mat')   % load immediately
 | View          | What it shows                                                            |
 |---------------|--------------------------------------------------------------------------|
 | **Map**       | Specular points on a lat/lon map, coloured by any variable.              |
-| **Histogram** | Distribution of any numeric variable (optional log axis).                |
+| **Histogram** | Distribution of any numeric variable (optional dB axis).                 |
 | **Scatter**   | Any variable vs any other, coloured by a third.                          |
 | **Time series** | Any numeric variable against `timeUTC`.                                |
 | **Statistics** | Summary table (count, min, max, mean, median, std, % NaN) per variable. |
+
+**dB scale** — when ticked, the plotted quantity is converted with `10*log10(x)`
+(non-positive values are dropped). It applies to the histogram values, the
+scatter/time-series Y axis, and the map colour, and the axis/colourbar label
+gets a `[dB]` suffix.
 
 ## Filters
 
