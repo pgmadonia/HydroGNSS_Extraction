@@ -74,7 +74,8 @@ colorDD= addDropdown('Colour by',{''});
 cmapDD = addDropdown('Colormap',{'parula','turbo','jet','hot','cool','viridis-ish (parula)','gray'});
 cmapDD.Value = 'parula';
 
-dbChk = addCheckbox('dB scale (10*log10)',false);
+dbChk  = addCheckbox('dB scale (Y / value, 10*log10)',false);
+dbXChk = addCheckbox('dB scale (X axis, scatter)',false);
 nbinsSpin = addSpinner('Histogram bins',10,500,50);
 sizeSpin  = addSpinner('Marker size',1,60,10);
 maxSpin   = addSpinner('Max points drawn (x1000)',1,5000,200);
@@ -380,6 +381,7 @@ onPlotTypeChange();   % set initial enabled/disabled control states
         setEnable(nbinsSpin, strcmp(pt,'Histogram'));
         setEnable(cmapDD, any(strcmp(pt,{'Map','Scatter'})));
         setEnable(dbChk, any(strcmp(pt,{'Map','Scatter','Histogram','Time series'})));
+        setEnable(dbXChk, strcmp(pt,'Scatter'));
         if ~isempty(D.file), refresh(); end
     end
 
@@ -476,17 +478,25 @@ onPlotTypeChange();   % set initial enabled/disabled control states
         x = getNumericIdx(xDD.Value, idx);
         y = getNumericIdx(yDD.Value, idx);
         [c,cLabel] = colorData(idx);
-        if dbChk.Value
-            good = y>0; x=x(good); y=10*log10(y(good));
-            if ~isempty(c), c=c(good); end
+        % dB per axis, independently. log10 needs positive input, so drop any
+        % non-positive points on an axis being converted (both axes if both on).
+        good = true(size(x));
+        if dbXChk.Value, good = good & (x>0); end
+        if dbChk.Value,  good = good & (y>0); end
+        if dbXChk.Value || dbChk.Value
+            x = x(good); y = y(good);
+            if ~isempty(c), c = c(good); end
         end
+        if dbXChk.Value, x = 10*log10(x); end
+        if dbChk.Value,  y = 10*log10(y); end
         if isempty(c)
             scatter(ax, x, y, sizeSpin.Value, 'filled','MarkerFaceAlpha',0.5);
         else
             scatter(ax, x, y, sizeSpin.Value, c, 'filled','MarkerFaceAlpha',0.6);
             applyColorbar(cLabel);
         end
-        xlabel(ax,xDD.Value,'Interpreter','none');
+        xl = xDD.Value; if dbXChk.Value, xl = [xl ' [dB]']; end
+        xlabel(ax,xl,'Interpreter','none');
         yl = yDD.Value; if dbChk.Value, yl = [yl ' [dB]']; end
         ylabel(ax,yl,'Interpreter','none');
         grid(ax,'on');

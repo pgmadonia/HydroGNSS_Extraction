@@ -37,10 +37,12 @@ HydroGNSS_dashboard('D:\output\Sudd_25-08-26_10-30.mat')   % load immediately
 | **Time series** | Any numeric variable against `timeUTC`.                                |
 | **Statistics** | Summary table (count, min, max, mean, median, std, % NaN) per variable. |
 
-**dB scale** — when ticked, the plotted quantity is converted with `10*log10(x)`
-(non-positive values are dropped). It applies to the histogram values, the
-scatter/time-series Y axis, and the map colour, and the axis/colourbar label
-gets a `[dB]` suffix.
+**dB scale** — converts the plotted quantity with `10*log10(x)` (non-positive
+values are dropped) and adds a `[dB]` suffix to the label. The main switch,
+**dB scale (Y / value)**, applies to the histogram values, the scatter/time-series
+Y axis, and the map colour. In the Scatter view a second switch, **dB scale
+(X axis)**, converts the X axis independently, so you can put either axis or both
+in dB.
 
 ## Filters
 
