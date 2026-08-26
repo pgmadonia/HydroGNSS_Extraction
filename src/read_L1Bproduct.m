@@ -94,7 +94,28 @@ IND_sixhours=IND_sixhours+1  ;
 [a b ]= size(infometa.Attributes) ; % b is the numbero of elements in main Attribute to find the "DataTag" 
 for jk=1:b ,  if infometa.Attributes(jk).Name == "DataTag" , ind=jk; end, end
 DataTag(IND_sixhours)=convertCharsToStrings(infometa.Attributes(ind).Value) ; 
+%
+% Per-block state. Drop the group-id caches left by the previous 6-hour block:
+% they are indexed by track number, so a block with fewer tracks would otherwise
+% keep stale ids pointing into a file that has already been closed.
+clear channelNcids coinNcids channelNcids2 coinNcids2
+ncid2 = -1 ;                 % DDM file handle; -1 means "not open"
+readDDMsinglefile = "No" ;   % re-decided below for this block
+%
+% A corrupt metadata file must not abort the run any more than a corrupt DDM file.
+try
 ncid = netcdf.open(fullfile([Path_L1B_day,'\',char(Dir_Day(jj))],metadata_name), 'NC_NOWRITE');
+catch ME
+    disp([char(datetime('now','Format','yyyy-MM-dd HH:mm:ss')) ' ERROR: cannot open metadata file in block ' char(Dir_Day(jj)) ' on ' char(datetime(Year, Month, Day)) ': ' ME.message '. Block skipped, program continuing']) ;
+    fprintf(logfileID,[char(datetime('now','Format','yyyy-MM-dd HH:mm:ss')) ' ERROR: cannot open metadata file in block ' char(Dir_Day(jj)) ' on ' char(datetime(Year, Month, Day)) ': ' ME.message '. Block skipped, program continuing']) ;
+    fprintf(logfileID,'\n') ;
+    continue
+end
+%
+% Everything from here to the matching catch runs with ncid open, so any failure
+% has to go through the catch or the handle leaks. Leaked handles accumulate over
+% a long run until the OS limit is hit and netcdf.open starts failing.
+try
 % trackNcids = netcdf.inqGrps(ncid);
 %  for track = 1:length(trackNcids)
 %     channelNcids{track} = netcdf.inqGrps(trackNcids(track));    % ??? valkuare se fare un solo vettore che deve avere dumensiobni varabilim2x2 o 2x4
@@ -156,6 +177,9 @@ fprintf(logfileID,'\n') ;
 readDDMsinglefile="No" ; 
 elseif exist(fullfile([Path_L1B_day,'\',char(Dir_Day(jj))],DDMs_name)) >0 & readDDM=="Yes" |  exist(fullfile([Path_L1B_day,'\',char(Dir_Day(jj))],DDMs_name)) >0 & readDDM=="Y" 
 readDDMsinglefile="Yes" ;
+% A corrupt or truncated DDMs.nc must not take the whole run down: fall back to
+% metadata-only for this block instead.
+try
 ncid2 = netcdf.open(fullfile([Path_L1B_day,'\',char(Dir_Day(jj))],DDMs_name), 'NC_NOWRITE');
 % trackNcids2 = netcdf.inqGrps(ncid2);
 % for track = 1:length(trackNcids2)
@@ -183,6 +207,14 @@ end
 disp(size(coinNcids2))
 disp(length(coinNcids2{1}))
 disp(coinNcids2{1}{1})
+catch ME
+    disp([char(datetime('now','Format','yyyy-MM-dd HH:mm:ss')) ' WARNING: cannot read DDM file in block ' char(Dir_Day(jj)) ': ' ME.message '. Continuing without DDMs for this block']) ;
+    fprintf(logfileID,[char(datetime('now','Format','yyyy-MM-dd HH:mm:ss')) ' WARNING: cannot read DDM file in block ' char(Dir_Day(jj)) ': ' ME.message '. Continuing without DDMs for this block']) ;
+    fprintf(logfileID,'\n') ;
+    if ncid2 >= 0 , try, netcdf.close(ncid2) ; catch, end , end
+    ncid2 = -1 ;
+    readDDMsinglefile = "No" ;
+end
 end 
 %%  end if to open DDM file if exists and readDDM is Yes
 % toc
@@ -1580,8 +1612,21 @@ DDM=cat(3, DDM, read) ;
 % AccuDDMSNR =accumarray([row column],10.^(DDMSNRAtPeakSingleDDM/10), [], @mean) ;
     end
 end % end loop on number of groups/tracks
-netcdf.close(ncid) ; 
-if readDDMsinglefile=="Yes" | readDDMsinglefile=="Y" , netcdf.close(ncid2) , end ; 
+%
+catch ME
+% Anything that failed inside this 6-hour block lands here. Log it, close both
+% handles, and move to the next block rather than aborting the whole run.
+    disp([char(datetime('now','Format','yyyy-MM-dd HH:mm:ss')) ' ERROR: block ' char(Dir_Day(jj)) ' on ' char(datetime(Year, Month, Day)) ' failed: ' ME.message '. Block skipped, program continuing']) ;
+    fprintf(logfileID,[char(datetime('now','Format','yyyy-MM-dd HH:mm:ss')) ' ERROR: block ' char(Dir_Day(jj)) ' on ' char(datetime(Year, Month, Day)) ' failed: ' ME.message '. Block skipped, program continuing']) ;
+    fprintf(logfileID,'\n') ;
+    try, netcdf.close(ncid) ; catch, end
+    if ncid2 >= 0 , try, netcdf.close(ncid2) ; catch, end , end
+    continue
+end
+netcdf.close(ncid) ;
+% Close on the handle itself, not on the flag: the two can disagree when the DDM
+% file failed to open.
+if ncid2 >= 0 , netcdf.close(ncid2) ; end
 end % end loop on number of six-hour blocks 
 end % end loop on number of days
 

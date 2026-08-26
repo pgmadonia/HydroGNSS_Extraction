@@ -144,8 +144,14 @@ Dayfinal = datetime(Dayfinal, 'InputFormat', 'yyyy-MM-dd''T''HH:mm') ;
 %%
 % Set and open the log file
 %
-if ~exist(LogsOutputRootPath)
-        throw(MException('INPUT:ERROR', "Cannot find configuration file. Please check the command line and try again."))
+if ~exist(char(LogsOutputRootPath), 'dir')
+        throw(MException('INPUT:ERROR', "Logs directory does not exist: " + string(LogsOutputRootPath)))
+end
+%
+% Check the output directory here too, before any data is read, so that a wrong
+% path fails immediately instead of at the final save() once the run is over.
+if ~exist(char(DataOutputRootPath), 'dir')
+        throw(MException('INPUT:ERROR', "Output directory does not exist: " + string(DataOutputRootPath)))
 end
 %
 logfile= datetime('now','Format','yyyyMMddHHmmss') ; 
@@ -211,7 +217,7 @@ SM_Time_resolution=ceil(juliandate(endDate)-juliandate(startDate)) ;
 readDDM=DDM; DDMs_name='DDMs.nc'; L1b_ProcessorVersion=' ' ; L1a_ProcessorVersion=' ';
 metadata_name='metadata_L1_merged.nc' ; Day_to_process=Dayinit; 
 Both=0 ; 
-if ProcessingSatellite=="Both" | ProcessingSatellite=="both"
+if strcmpi(ProcessingSatellite, 'Both')
     Both=1 ;
     ProcessingSatellite='HydroGNSS-1' ; 
     Path_HydroGNSS_Data=[char(DataInputRootPath), '\', char(ProcessingSatellite), '\DataRelease\L1A_L1B'] ; 
@@ -656,6 +662,14 @@ if min(ismissing(ReflectionCoefficientAtSP(kk).PowerAnalog_W_E5_RHCP))==0 , powe
   end % end case over the satgellite
 end % end fir over the tracks
 
+% Sigma0 carries the raw DDM arrays for every track and is not read past this
+% point (last use is in the loop above). Release it before the land filter and
+% the save, which are the peak-memory part of the run. "clear global" is needed:
+% a plain "clear" would only drop the local link and leave the data allocated.
+% ReflectionCoefficientAtSP cannot be released here, it is this function's
+% declared return value.
+clear global Sigma0
+
 %  
 Nameout=[char(Outfileprefix) '_' char(datetime('now','Format','yy-MM-dd_HH-mm'),'yy-MM-dd_HH-mm') '.mat'] ; 
 %
@@ -699,7 +713,7 @@ notToBeUsed_1_R = single( (kurtosisDopp0_1_R == 1) | (DirectSignalInDDM_1_R == 1
 %notToBeUsed_L1_R = single( (kurtosisDopp0_L1_R == 1) | (DirectSignalInDDM_L1_R == 1) );
 %%%%%%%%%%%%%%%%%%% select Land data is require
 %Water=210, Snow_and_ice=220
-if DataFilter==string('Land') 
+if strcmpi(DataFilter, 'Land') 
 LandSPindx=find(Landtypesub<210) ; 
 %
     disp([char(datetime('now','Format','yyyy-MM-dd HH:mm:ss')) ' INFO: selecting land data with LandType < 210']) ;
@@ -742,9 +756,10 @@ idxCols = min(max(idxCols,1), nCols);
 assert(all(idxRows >= 1 & idxRows <= nRows), 'Row indices out of range');
 assert(all(idxCols >= 1 & idxCols <= nCols), 'Column indices out of range');
 
-% Safe indexing
-linearIdx = sub2ind([nRows, nCols], idxRows, idxCols);
-linearIdx = sub2ind([nCols, nRows ], idxCols, idxRows);
+% Safe indexing. seaMask is [nCols x nRows] (see the size() call where the mask is
+% loaded) and easeconv_grid3 returns the column first, so the subscripts go in
+% that order: dimension 1 is indexed by idxCols, dimension 2 by idxRows.
+linearIdx = sub2ind([nCols, nRows], idxCols, idxRows);
 validIdx = find(validLL);
 
 isOceanValid = isnan(seaMask(linearIdx));

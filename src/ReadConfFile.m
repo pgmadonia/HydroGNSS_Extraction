@@ -58,8 +58,8 @@ function [ProcessingSatellite, DataInputRootPath, DataOutputRootPath, Outfilepre
             ConfigRightLine= contains(lines,'Dayinit')  ;  
             ConfigRightLine= find(ConfigRightLine==1)  ;   
             startIndex= regexp(lines(ConfigRightLine),'=') ; 
-            Dayinit= extractAfter(lines(ConfigRightLine),startIndex) ; % 
-            LatSouth=double(LatSouth) ; 
+            Dayinit= extractAfter(lines(ConfigRightLine),startIndex) ; %
+            % Dayinit stays a string: HydroGNSS_extract parses it with datetime()
 
             %%                  
             ConfigRightLine= contains(lines,'Dayfinal')  ;  
