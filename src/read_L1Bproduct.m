@@ -1,11 +1,18 @@
 %syed
 function [DataTag, noday, Track_ID, IND_sixhours, L1b_ProcessorVersion, L1a_ProcessorVersion]=read_L1Bproduct(DataTag, Day_to_process,...
     SM_Time_resolution, Path_HydroGNSS_Data, metadata_name, readDDM, ...
-    DDMs_name, Track_ID, IND_sixhours, L1b_ProcessorVersion, L1a_ProcessorVersion) ; 
+    DDMs_name, Track_ID, IND_sixhours, L1b_ProcessorVersion, L1a_ProcessorVersion,...
+    LatSouth, LatNorth, LonWest, LonEast) ; 
 %
 % Track_ID: ID of the track written in the output structure which
 % starts from the one the previous day
-noday=0 ; 
+noday=0 ;
+% Geographic box from the configuration, applied while reading so that points
+% outside the area of interest are never accumulated. The bounds are kept in the
+% caller's convention; only the product longitudes are normalised, at the point
+% of comparison, so a global box (-180..180) still passes everything.
+LatSouth = double(LatSouth) ; LatNorth = double(LatNorth) ;
+LonWest  = double(LonWest)  ; LonEast  = double(LonEast)  ; 
 global namelogfile logfileID  ; 
 global ReflectionCoefficientAtSP Sigma0 ; 
 %a
@@ -237,9 +244,33 @@ fprintf(logfileID,'\n') ;
 %
 [a NumberOfChannels]=size(infometa.Groups(kk).Groups) ; 
 %
-if NumberOfChannels > 0   
-% Case of HydroGNSS with several channels. Read specular point data   
-Track_ID=Track_ID+1 ; 
+if NumberOfChannels > 0
+% Case of HydroGNSS with several channels. Read specular point data
+%
+% Geographic filter, part 1 of 2. Read just the specular point coordinates and
+% drop the whole track when none of its points fall inside the configured box.
+% Doing this before Track_ID is incremented keeps the numbering gap-free, and
+% doing it before the channel loop means a rejected track costs two small reads
+% instead of ~100 variables plus its DDMs.
+varIdGeo = netcdf.inqVarID(trackNcids(kk), 'SpecularPointLat');
+spLatGeo = double(netcdf.getVar(trackNcids(kk), varIdGeo)) ;
+varIdGeo = netcdf.inqVarID(trackNcids(kk), 'SpecularPointLon');
+spLonGeo = double(netcdf.getVar(trackNcids(kk), varIdGeo)) ;
+% Normalise to [-180,180) so the test holds whether the product stores 0..360.
+spLonGeo = mod(spLonGeo + 180, 360) - 180 ;
+if LonWest <= LonEast
+    inLonGeo = spLonGeo >= LonWest & spLonGeo <= LonEast ;
+else
+    % Box crosses the antimeridian, so the in-range longitudes are the union.
+    inLonGeo = spLonGeo >= LonWest | spLonGeo <= LonEast ;
+end
+keepGeo = spLatGeo >= LatSouth & spLatGeo <= LatNorth & inLonGeo ;
+keepGeo = keepGeo(:) ;
+if ~any(keepGeo)
+    continue
+end
+%
+Track_ID=Track_ID+1 ;
 % [c d]=size(num2str(Track_ID)) ; 
 % groupname='000000'; groupname(6-d+1:end)=num2str(Track_ID) ;
 % ReflectionCoefficientAtSP(Track_ID).Name= groupname ; 
@@ -1563,7 +1594,17 @@ end
 
  end  % end switch between signals / pol 
 % ReflectionCoefficientAtSP(Track_ID).Satellite=Signal{1} ; 
-end       % end loop on channels 
+end       % end loop on channels
+%
+% Geographic filter, part 2 of 2. Every variable for this track has now been
+% read, so trim them all down to the points inside the box. Whole-track metadata
+% is left alone; see subsetTrackToPoints at the end of this file.
+if ~all(keepGeo)
+    ReflectionCoefficientAtSP(Track_ID) = subsetTrackToPoints(ReflectionCoefficientAtSP(Track_ID), keepGeo, sizeGroup, Track_ID) ;
+    if Track_ID <= numel(Sigma0)
+        Sigma0(Track_ID) = subsetTrackToPoints(Sigma0(Track_ID), keepGeo, sizeGroup, Track_ID) ;
+    end
+end
         
 
 elseif NumberOfChannels== 0  ; 
@@ -1627,7 +1668,39 @@ netcdf.close(ncid) ;
 % Close on the handle itself, not on the flag: the two can disagree when the DDM
 % file failed to open.
 if ncid2 >= 0 , netcdf.close(ncid2) ; end
-end % end loop on number of six-hour blocks 
+end % end loop on number of six-hour blocks
 end % end loop on number of days
 
+end
+
+function s = subsetTrackToPoints(s, keep, n, trackId)
+% Keep only the specular points selected by "keep" in every per-point field of a
+% track. Fields are recognised by shape: a per-point vector has n elements, and a
+% DDM array carries the samples on dimension 3. Whole-track metadata is skipped
+% by name, and anything else is left untouched.
+%
+% A field that looks per-point but is not n long is reported rather than guessed
+% at: leaving one unfiltered would silently misalign it against every other field
+% of the track, which is the worst way for this to fail.
+global logfileID ;
+metaFields = {'Name','PRN','SVN','GNSSConstellation_units','Satellite', ...
+              'SixHourDir','TrackIDOrbit'} ;
+flds = fieldnames(s) ;
+for ff = 1:numel(flds)
+    if any(strcmp(flds{ff}, metaFields)) , continue , end
+    v = s.(flds{ff}) ;
+    if isempty(v) , continue , end
+    if isvector(v) && numel(v) == n
+        s.(flds{ff}) = v(keep) ;
+    elseif ndims(v) == 3 && size(v,3) == n
+        s.(flds{ff}) = v(:,:,keep) ;
+    elseif any(size(v) == n) || (isnumeric(v) && isvector(v) && numel(v) > 1)
+        msg = [char(datetime('now','Format','yyyy-MM-dd HH:mm:ss')) ...
+               ' WARNING: field ' flds{ff} ' of track ' num2str(trackId) ...
+               ' has size [' num2str(size(v)) '], expected ' num2str(n) ...
+               ' points. Left unfiltered by the geographic filter'] ;
+        disp(msg) ;
+        if ~isempty(logfileID) && logfileID > 0 , fprintf(logfileID, '%s\n', msg) ; end
+    end
+end
 end

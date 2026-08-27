@@ -6,7 +6,41 @@ Status legend: **FIXED** · **OPEN** · **SKIPPED** (deliberately not applied) �
 
 ## HIGH severity
 
-*(none — see the note on BUG 1)*
+### BUG 9 — the geographic bounding box was never applied — **FIXED**
+**File:** `HydroGNSS_extract.m` (config plumbing) and `read_L1Bproduct.m` (new filter)
+
+`LatSouth`, `LatNorth`, `LonWest` and `LonEast` were read from the config (lines 27,
+134), shown in and read back from the GUI (77–82, 114–117) and written back to the
+config (127) — and then never compared against anything. There was no test against
+`specularPointLat` / `specularPointLon` anywhere, and `read_L1Bproduct` was not
+passed them. **Every run extracted globally regardless of the configured box**,
+which is why regional configs such as `sudd_conf.cfg` and `everglades_conf.cfg`
+produced whole-globe datasets and hit memory pressure.
+
+Now filtered at read time, in two parts, so out-of-box points are never accumulated:
+
+1. **Per-track rejection**, before `Track_ID` is incremented and before the channel
+   loop. Only `SpecularPointLat` / `Lon` are read; if no point of the track falls in
+   the box the track is skipped, costing two small reads instead of ~100 variables
+   plus its DDMs. Doing it before the increment keeps track numbering gap-free.
+2. **Per-point trim**, after the channel loop, via the local function
+   `subsetTrackToPoints`. Per-point fields are recognised by length (`sizeGroup`),
+   DDM arrays by `size(...,3)`, and whole-track metadata (`Name`, `PRN`, `SVN`,
+   `Satellite`, `SixHourDir`, `GNSSConstellation_units`, `TrackIDOrbit`) is skipped
+   by name.
+
+Longitudes are normalised to [-180,180) at comparison time so the test works whether
+the product stores 0..360 or -180..180, and a box with `LonWest > LonEast` is treated
+as crossing the antimeridian. A global box (-90..90, -180..180) passes everything and
+skips both the rejection and the trim, so global runs are unaffected.
+
+**Residual risk:** the trim identifies per-point fields by shape, not by an explicit
+list. A field that is per-point but not `sizeGroup` long would be left unfiltered and
+would then misalign against the rest of the track. That case logs a warning naming the
+field, its size and the expected count, rather than failing silently — **check the log
+for `Left unfiltered by the geographic filter` after the first regional run.**
+
+The land filter deliberately stays where it was, at the end of `HydroGNSS_extract.m`.
 
 ---
 
